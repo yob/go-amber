@@ -38,5 +38,6 @@ func main() {
 
 	for _, price := range prices {
     fmt.Printf("%+v\n", price)
+  }
 }
 ```

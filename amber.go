@@ -43,6 +43,7 @@ type Price struct {
 	Estimate    bool    `json:"estimate"`
 }
 
+// Return a new API client struct that can be used to query the amber API
 func NewClient(apiKey string) *Client {
 	return &Client{
 		BaseURL: BaseURLV1,
@@ -53,6 +54,10 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
+// Return sites available to this token. Typically will only be a single site.
+//
+// The site id is useful for other methods on the client, like returning prices for a particular
+// site.
 func (c *Client) GetSites(ctx context.Context) ([]Site, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/sites", c.BaseURL), nil)
 	if err != nil {
@@ -69,6 +74,7 @@ func (c *Client) GetSites(ctx context.Context) ([]Site, error) {
 	return res, nil
 }
 
+// Return two current prices - one for the general channel, one for the feedIn channel
 func (c *Client) GetCurrentPrices(ctx context.Context, site Site) ([]Price, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/sites/%s/prices/current?resolution=30", c.BaseURL, site.Id), nil)
 	if err != nil {

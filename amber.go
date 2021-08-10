@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 )
 
 const (
-	BaseURLV1 = "https://api.amber.com.au/v1"
+	BaseURLV1  = "https://api.amber.com.au/v1"
+	yyyy_mm_dd = "2006-01-02"
 )
 
 type Client struct {
@@ -29,18 +31,18 @@ type Site struct {
 }
 
 type Price struct {
-	Type        string  `json:"type"`
-	Date        string  `json:"date"`
-	Duration    int     `json:"duration"`
-	StartTime   string  `json:"startTime"`
-	EndTime     string  `json:"endTime"`
-	NemTime     string  `json:"nemTime"`
-	PerKwh      float64 `json:"perKwh"`
-	Renewables  float64 `json:"renewables"`
-	SpotPerKwh  float64 `json:"spotPerKwh"`
-	ChannelType string  `json:"channelType"`
-	SpikeStatus string  `json:"spikeStatus"`
-	Estimate    bool    `json:"estimate"`
+	Type        string    `json:"type"`
+	Date        string    `json:"date"`
+	Duration    int       `json:"duration"`
+	StartTime   time.Time `json:"startTime"`
+	EndTime     time.Time `json:"endTime"`
+	NemTime     string    `json:"nemTime"`
+	PerKwh      float64   `json:"perKwh"`
+	Renewables  float64   `json:"renewables"`
+	SpotPerKwh  float64   `json:"spotPerKwh"`
+	ChannelType string    `json:"channelType"`
+	SpikeStatus string    `json:"spikeStatus"`
+	Estimate    bool      `json:"estimate"`
 }
 
 // Return a new API client struct that can be used to query the amber API
@@ -89,6 +91,38 @@ func (c *Client) GetCurrentPrices(ctx context.Context, site Site) ([]Price, erro
 	}
 
 	return res, nil
+}
+
+// Return up to 24 hours of forecast prices for the general channel, sorted by
+// start time
+func (c *Client) GetForecastGeneralPrices(ctx context.Context, site Site) ([]Price, error) {
+	todayDate := time.Now().Format(yyyy_mm_dd)
+	tomorrowDate := time.Now().Add(time.Hour * 24).Format(yyyy_mm_dd)
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/sites/%s/prices?resolution=30&startDate=%s&endDate=%s", c.BaseURL, site.Id, todayDate, tomorrowDate), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req = req.WithContext(ctx)
+
+	res := []Price{}
+	if err := c.sendRequest(req, &res); err != nil {
+		return nil, err
+	}
+
+	generalForecastPrices := []Price{}
+	for _, price := range res {
+		if price.Type == "ForecastInterval" && price.ChannelType == "general" {
+			generalForecastPrices = append(generalForecastPrices, price)
+		}
+	}
+
+	sort.Slice(generalForecastPrices, func(i, j int) bool {
+		return generalForecastPrices[i].StartTime.Before(generalForecastPrices[j].StartTime)
+	})
+
+	return generalForecastPrices, nil
 }
 
 func (c *Client) sendRequest(req *http.Request, v interface{}) error {
